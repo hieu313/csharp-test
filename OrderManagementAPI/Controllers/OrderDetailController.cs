@@ -11,6 +11,13 @@ public class OrderDetailsController : ControllerBase
     private readonly IOrderDetailService _service;
     public OrderDetailsController(IOrderDetailService service) => _service = service;
 
+    [HttpGet]
+    public async Task<IActionResult> GetList([FromQuery] OrderDetailQuery query)
+    {
+        var result = await _service.GetListAsync(query);
+        return Ok(result);
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {

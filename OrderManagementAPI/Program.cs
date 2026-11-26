@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using OrderManagement;
+using OrderManagement.Exceptions;
 using OrderManagement.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,7 +16,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<IOrderDetailService, OrderDetailService>();
 builder.Services.AddOpenApi();
 
+builder.Services.AddExceptionHandler<AppExceptionHandler>();
+builder.Services.AddProblemDetails();
+
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

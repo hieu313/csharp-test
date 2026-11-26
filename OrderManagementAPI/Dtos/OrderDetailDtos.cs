@@ -32,3 +32,9 @@ public record OrderDetailResponseDto(
   DateTime CreatedAt,
   DateTime UpdatedAt
 );
+
+public record OrderSummary(int TotalItems, int TotalQuantity, decimal TotalAmount);
+
+public record OrderDetailsByOrderResponse(
+    IReadOnlyList<OrderDetailResponseDto> Data,
+    OrderSummary Summary);

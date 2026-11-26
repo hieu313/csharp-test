@@ -12,6 +12,7 @@ public interface IOrderDetailService
     Task<OrderDetailResponseDto> CreateAsync(CreateOrderDetailRequest req);
     Task<OrderDetailResponseDto> UpdateAsync(Guid id, UpdateOrderDetailRequest req);
     Task DeleteAsync(Guid id);
+    Task<OrderDetailsByOrderResponse> GetByOrderIdAsync(Guid orderId);
 }
 
 public class OrderDetailService : IOrderDetailService
@@ -66,6 +67,30 @@ public class OrderDetailService : IOrderDetailService
         return new PagedResponse<OrderDetailResponseDto>(
             data,
             new PaginationMeta(q.Page, q.Limit, total, totalPages));
+    }
+
+    public async Task<OrderDetailsByOrderResponse> GetByOrderIdAsync(Guid orderId)
+    {
+        // anyasync như case where exists, nhanh hơn count > 0
+        var orderExists = await _db.Orders.AnyAsync(o => o.Id == orderId);
+        if (!orderExists)
+            throw new NotFoundException($"Order '{orderId}' not found");
+
+        // lấy hết
+        var data = await _db.OrderDetails
+            .AsNoTracking()
+            .Where(od => od.OrderId == orderId)
+            .OrderBy(od => od.CreatedAt)
+            .ThenBy(od => od.Id)
+            .Select(ToDto)
+            .ToListAsync();
+
+        var summary = new OrderSummary(
+            TotalItems: data.Count,                      
+            TotalQuantity: data.Sum(d => d.Quantity), 
+            TotalAmount: data.Sum(d => d.Subtotal)); 
+
+        return new OrderDetailsByOrderResponse(data, summary);
     }
 
     public async Task<OrderDetailResponseDto> CreateAsync(CreateOrderDetailRequest req)

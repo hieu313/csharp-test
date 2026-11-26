@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using OrderManagement.Dtos;
 using OrderManagement.Services;
-
 namespace OrderManagement.Controllers;
 
 [ApiController]
@@ -46,6 +45,13 @@ public class OrderDetailsController : ControllerBase
         if (orderDetail is null)
             return NotFound(new { message = $"Order detail '{id}' not found" });
         return Ok(orderDetail);
+    }
+
+    [HttpGet("order/{orderId:guid}")]
+    public async Task<IActionResult> GetByOrderId(Guid orderId)
+    {
+        var orderDetails = await _service.GetByOrderIdAsync(orderId);
+        return Ok(orderDetails);
     }
 }
 

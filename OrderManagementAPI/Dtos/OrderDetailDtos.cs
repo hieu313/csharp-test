@@ -38,3 +38,9 @@ public record OrderSummary(int TotalItems, int TotalQuantity, decimal TotalAmoun
 public record OrderDetailsByOrderResponse(
     IReadOnlyList<OrderDetailResponseDto> Data,
     OrderSummary Summary);
+
+public record ProductSalesSummary(int TotalOrders, int TotalQuantitySold, decimal TotalRevenue);
+
+public record OrderDetailsByProductResponse(
+    IReadOnlyList<OrderDetailResponseDto> Data,
+    ProductSalesSummary Summary);

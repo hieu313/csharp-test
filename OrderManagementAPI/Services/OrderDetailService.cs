@@ -13,6 +13,7 @@ public interface IOrderDetailService
     Task<OrderDetailResponseDto> UpdateAsync(Guid id, UpdateOrderDetailRequest req);
     Task DeleteAsync(Guid id);
     Task<OrderDetailsByOrderResponse> GetByOrderIdAsync(Guid orderId);
+    Task<OrderDetailsByProductResponse> GetByProductIdAsync(Guid productId);
 }
 
 public class OrderDetailService : IOrderDetailService
@@ -91,6 +92,37 @@ public class OrderDetailService : IOrderDetailService
             TotalAmount: data.Sum(d => d.Subtotal)); 
 
         return new OrderDetailsByOrderResponse(data, summary);
+    }
+
+    public async Task<OrderDetailsByProductResponse> GetByProductIdAsync(Guid productId)
+    {
+        var productExists = await _db.Products.AnyAsync(p => p.Id == productId);
+        if (!productExists)
+            throw new NotFoundException($"Product '{productId}' not found");
+
+        //toàn bộ lịch sử
+        var data = await _db.OrderDetails
+            .AsNoTracking()
+            .Where(od => od.ProductId == productId)
+            .OrderByDescending(od => od.CreatedAt)
+            .ThenBy(od => od.Id)
+            .Select(ToDto)
+            .ToListAsync();
+
+        // SELECT COUNT(DISTINCT order_id), SUM(quantity), SUM(subtotal)
+        //   FROM OrderDetails JOIN Orders ... WHERE product_id = @id AND status <> 'cancelled'
+        // GROUP BY (SELECT 1); 
+        var summary = await _db.OrderDetails
+            .Where(od => od.ProductId == productId && od.Order.Status != OrderStatus.Cancelled)
+            .GroupBy(_ => 1) //(lấy nhiều aggregate trong 1 query (thay vì 3 lần Count/Sum).)
+            .Select(g => new ProductSalesSummary(
+                g.Select(od => od.OrderId).Distinct().Count(),   //distinct để tránh trùng theo order_id
+                g.Sum(od => od.Quantity),
+                g.Sum(od => od.Subtotal)))
+            .FirstOrDefaultAsync()
+            ?? new ProductSalesSummary(0, 0, 0); //nếu chưa bán lần nào, trả về 0
+
+        return new OrderDetailsByProductResponse(data, summary);
     }
 
     public async Task<OrderDetailResponseDto> CreateAsync(CreateOrderDetailRequest req)

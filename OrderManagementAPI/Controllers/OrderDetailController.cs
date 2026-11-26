@@ -53,5 +53,12 @@ public class OrderDetailsController : ControllerBase
         var orderDetails = await _service.GetByOrderIdAsync(orderId);
         return Ok(orderDetails);
     }
+
+    [HttpGet("product/{productId:guid}")]
+    public async Task<IActionResult> GetByProductId(Guid productId)
+    {
+        var result = await _service.GetByProductIdAsync(productId);
+        return Ok(result);
+    }
 }
 

@@ -25,6 +25,13 @@ public class OrderDetailsController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateOrderDetailRequest request)
+    {
+        var updated = await _service.UpdateAsync(id, request);
+        return Ok(updated);
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {

@@ -48,7 +48,8 @@ CREATE INDEX IX_OrderDetails_OrderId
 
 CREATE INDEX IX_OrderDetails_ProductId
     ON OrderDetails(product_id);
-
+-- khoá update lock -> các req get vẫn đọc được
+ALTER DATABASE OrderManagement SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE;
 
 -- INSERT DATA --
 INSERT INTO Products (id, name, sku, price, stock) VALUES

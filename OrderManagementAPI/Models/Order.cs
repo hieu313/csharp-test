@@ -28,11 +28,5 @@ public class Order
         CreatedAt = UpdatedAt = DateTime.UtcNow;
     }
 
-    public void UpdateTotalAmount(decimal amount)
-    {
-        TotalAmount = amount;
-        UpdatedAt = DateTime.UtcNow;
-    }
-
     public bool IsEditable() => Status == OrderStatus.Pending || Status == OrderStatus.Confirmed;
 }

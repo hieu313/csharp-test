@@ -10,7 +10,10 @@ public class AppExceptionHandler : IExceptionHandler
             return false;
 
         context.Response.StatusCode = appEx.StatusCode;
-        await context.Response.WriteAsJsonAsync(new { message = appEx.Message }, ct);
+        object body = appEx.Errors is null
+            ? new { message = appEx.Message }
+            : new { message = appEx.Message, errors = appEx.Errors };
+        await context.Response.WriteAsJsonAsync(body, ct);
         return true;
     }
 }

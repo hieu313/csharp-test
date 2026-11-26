@@ -24,6 +24,13 @@ public class OrderDetailsController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
+    [HttpPost("bulk")]
+    public async Task<IActionResult> CreateBulk([FromBody] CreateBulkOrderDetailRequest request)
+    {
+        var created = await _service.CreateBulkAsync(request);
+        return StatusCode(StatusCodes.Status201Created, created);
+    }
+
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateOrderDetailRequest request)
     {

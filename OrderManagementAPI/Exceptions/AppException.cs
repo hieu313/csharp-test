@@ -3,6 +3,9 @@ namespace OrderManagement.Exceptions;
 public class AppException : Exception
 {
     public int StatusCode { get; }
+
+    public object? Errors { get; init; }
+
     public AppException(int statusCode, string message) : base(message) => StatusCode = statusCode;
 }
 

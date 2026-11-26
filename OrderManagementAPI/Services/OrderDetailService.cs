@@ -1,7 +1,8 @@
-using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using OrderManagement.Dtos;
 using OrderManagement.Exceptions;
+using System.ComponentModel.DataAnnotations;
+using System.Linq.Expressions;
 
 namespace OrderManagement.Services;
 
@@ -10,6 +11,7 @@ public interface IOrderDetailService
     Task<OrderDetailResponseDto?> GetByIdAsync(Guid id);
     Task<PagedResponse<OrderDetailResponseDto>> GetListAsync(OrderDetailQuery q);
     Task<OrderDetailResponseDto> CreateAsync(CreateOrderDetailRequest req);
+    Task<IReadOnlyList<OrderDetailResponseDto>> CreateBulkAsync(CreateBulkOrderDetailRequest req);
     Task<OrderDetailResponseDto> UpdateAsync(Guid id, UpdateOrderDetailRequest req);
     Task DeleteAsync(Guid id);
     Task<OrderDetailsByOrderResponse> GetByOrderIdAsync(Guid orderId);
@@ -151,6 +153,79 @@ public class OrderDetailService : IOrderDetailService
         await tx.CommitAsync();
 
         return (await GetByIdAsync(detail.Id))!;
+    }
+
+    public async Task<IReadOnlyList<OrderDetailResponseDto>> CreateBulkAsync(CreateBulkOrderDetailRequest req)
+    {
+        var orderId = req.OrderId!.Value;
+        var items = req.Items;
+
+        var duplicates = items
+            .GroupBy(i => i.ProductId!.Value)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+        if (duplicates.Count > 0)
+            throw new BadRequestException($"Duplicate products in request: {string.Join(", ", duplicates)}");
+
+        await using var tx = await _db.Database.BeginTransactionAsync();
+
+        await EnsureOrderEditableAsync(orderId, "add items");
+
+// khoá tất cả product cần dùng (UPDLOCK) để tránh 2 request cùng lúc
+        var productIds = items.Select(i => i.ProductId!.Value).ToList();
+        var products = await _db.Products
+            .FromSql($"SELECT * FROM Products WITH (UPDLOCK, ROWLOCK)")
+            .Where(p => productIds.Contains(p.Id))
+            .OrderBy(p => p.Id)
+            .ToDictionaryAsync(p => p.Id);
+
+        var errors = new List<BulkItemError>();
+        for (var i = 0; i < items.Count; i++)
+        {
+            var productId = items[i].ProductId!.Value;
+            var quantity = items[i].Quantity!.Value;
+            var discount = items[i].Discount ?? 0;
+
+            if (!products.TryGetValue(productId, out var product))
+                errors.Add(new BulkItemError(i, productId, "Product not found"));
+            else if (quantity > product.Stock)
+                errors.Add(new BulkItemError(i, productId,
+                    $"Insufficient stock: requested {quantity}, available {product.Stock}"));
+            else if (discount > product.Price * quantity)
+                errors.Add(new BulkItemError(i, productId, "Discount cannot exceed unitPrice × quantity"));
+        }
+
+        if (errors.Count > 0)
+            throw new BadRequestException($"{errors.Count} of {items.Count} items are invalid, nothing was created")
+            {
+                Errors = errors
+            };
+
+        var details = new List<OrderDetail>(items.Count);
+        foreach (var item in items)
+        {
+            var product = products[item.ProductId!.Value];
+            var quantity = item.Quantity!.Value;
+
+            product.DecreaseStock(quantity);
+            details.Add(new OrderDetail(orderId, product.Id, quantity, product.Price, item.Discount ?? 0));
+        }
+        _db.OrderDetails.AddRange(details);
+        await _db.SaveChangesAsync();
+
+        await RecalculateOrderTotalAsync(orderId);
+
+        await tx.CommitAsync();
+
+        var createdIds = details.Select(d => d.Id).ToList();
+        var created = await _db.OrderDetails
+            .AsNoTracking()
+            .Where(od => createdIds.Contains(od.Id))
+            .Select(ToDto)
+            .ToDictionaryAsync(d => d.Id);
+
+        return createdIds.Select(id => created[id]).ToList();
     }
 
     public async Task<OrderDetailResponseDto> UpdateAsync(Guid id, UpdateOrderDetailRequest req)

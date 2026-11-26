@@ -32,6 +32,13 @@ public class OrderDetailsController : ControllerBase
         return Ok(updated);
     }
 
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        await _service.DeleteAsync(id);
+        return NoContent();
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {

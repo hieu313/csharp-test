@@ -11,6 +11,7 @@ public interface IOrderDetailService
     Task<PagedResponse<OrderDetailResponseDto>> GetListAsync(OrderDetailQuery q);
     Task<OrderDetailResponseDto> CreateAsync(CreateOrderDetailRequest req);
     Task<OrderDetailResponseDto> UpdateAsync(Guid id, UpdateOrderDetailRequest req);
+    Task DeleteAsync(Guid id);
 }
 
 public class OrderDetailService : IOrderDetailService
@@ -76,38 +77,20 @@ public class OrderDetailService : IOrderDetailService
 
         await using var tx = await _db.Database.BeginTransactionAsync();
 
-        var order = await _db.Orders
-            .AsNoTracking()
-            .FirstOrDefaultAsync(o => o.Id == orderId)
-            ?? throw new NotFoundException($"Order '{orderId}' not found");
-        if (!order.IsEditable())
-            throw new ConflictException($"Order is {order.Status.ToString().ToLower()}, cannot add items");
+        await EnsureOrderEditableAsync(orderId, "add items");
 
-        var product = await _db.Products
-            .AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Id == productId)
+        var product = await _db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == productId)
             ?? throw new NotFoundException($"Product '{productId}' not found");
-        var unitPrice = product.Price;
+        var unitPrice = product.Price;   // chốt giá tại thời điểm đặt
 
-        if (discount > unitPrice * quantity)
-            throw new BadRequestException("Discount cannot exceed unitPrice × quantity");
-
-        //UPDATE Products SET stock = stock - @qty WHERE id = @id AND stock >= @qty
-        var now = DateTime.UtcNow;
-        var affected = await _db.Products
-            .Where(p => p.Id == productId && p.Stock >= quantity)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(p => p.Stock, p => p.Stock - quantity)
-                .SetProperty(p => p.UpdatedAt, now));
-        if (affected == 0)
-            throw new ConflictException($"Insufficient stock: requested {quantity}, available {product.Stock}");
+        EnsureDiscountValid(discount, unitPrice, quantity);
+        await DecreaseStockAsync(productId, quantity);
 
         var detail = new OrderDetail(orderId, productId, quantity, unitPrice, discount, req.Notes);
         _db.OrderDetails.Add(detail);
         await _db.SaveChangesAsync();
 
         await RecalculateOrderTotalAsync(orderId);
-
         await tx.CommitAsync();
 
         return (await GetByIdAsync(detail.Id))!;
@@ -117,60 +100,109 @@ public class OrderDetailService : IOrderDetailService
     {
         await using var tx = await _db.Database.BeginTransactionAsync();
 
-        var detail = await _db.OrderDetails
-            .FromSqlInterpolated($"SELECT * FROM OrderDetails WITH (UPDLOCK, ROWLOCK) WHERE id = {id}")
-            .FirstOrDefaultAsync()
-            ?? throw new NotFoundException($"Order detail '{id}' not found");
-
-        var order = await _db.Orders.AsNoTracking().FirstAsync(o => o.Id == detail.OrderId);
-        if (!order.IsEditable())
-            throw new ConflictException($"Order is {order.Status.ToString().ToLower()}, cannot modify items");
+        var detail = await LockDetailAsync(id);
+        await EnsureOrderEditableAsync(detail.OrderId, "modify items");
 
         var newQuantity = req.Quantity ?? detail.Quantity;
         var newDiscount = req.Discount ?? detail.Discount;
 
-        // unitPrice giữ nguyên giá lúc đặt (không lấy lại giá hiện tại của Product)
-        if (newDiscount > detail.UnitPrice * newQuantity)
-            throw new BadRequestException("Discount cannot exceed unitPrice × quantity");
+        // unitPrice giữ nguyên giá lúc đặt, không lấy lại giá hiện tại của Product
+        EnsureDiscountValid(newDiscount, detail.UnitPrice, newQuantity);
 
-        // delta > 0: lấy thêm hàng → trừ stock (có kiểm tra đủ hàng)
-        // delta < 0: trả bớt hàng → cộng lại stock
-        // delta = 0: chỉ đổi discount/notes → không đụng stock
+        //Chỉ điều chỉnh stock theo phần chênh lệch
         var delta = newQuantity - detail.Quantity;
-        var now = DateTime.UtcNow;
-
         if (delta > 0)
-        {
-            var affected = await _db.Products
-                .Where(p => p.Id == detail.ProductId && p.Stock >= delta)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(p => p.Stock, p => p.Stock - delta)
-                    .SetProperty(p => p.UpdatedAt, now));
-            if (affected == 0)
-            {
-                var available = await _db.Products.Where(p => p.Id == detail.ProductId)
-                    .Select(p => p.Stock).FirstAsync();
-                throw new ConflictException($"Insufficient stock: need {delta} more, available {available}");
-            }
-        }
+            await DecreaseStockAsync(detail.ProductId, delta);// lấy thêm hàng
         else if (delta < 0)
-        {
-            await _db.Products
-                .Where(p => p.Id == detail.ProductId)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(p => p.Stock, p => p.Stock - delta)   // delta âm → cộng vào
-                    .SetProperty(p => p.UpdatedAt, now));
-        }
+            await IncreaseStockAsync(detail.ProductId, -delta);// hoàn trả hàng
 
-        // Entity tự tính lại subtotal và updated_at
         detail.Update(req.Quantity, req.Discount, req.Notes);
         await _db.SaveChangesAsync();
 
         await RecalculateOrderTotalAsync(detail.OrderId);
-
         await tx.CommitAsync();
 
         return (await GetByIdAsync(id))!;
+    }
+
+    public async Task DeleteAsync(Guid id)
+    {
+        await using var tx = await _db.Database.BeginTransactionAsync();
+
+        var detail = await LockDetailAsync(id);
+        await EnsureOrderEditableAsync(detail.OrderId, "remove items");
+
+        // hoàn trả stock
+        await IncreaseStockAsync(detail.ProductId, detail.Quantity);   
+
+        _db.OrderDetails.Remove(detail);
+        await _db.SaveChangesAsync();
+
+        // Xóa detail duy nhất → SUM rỗng → total = 0
+        await RecalculateOrderTotalAsync(detail.OrderId);
+        await tx.CommitAsync();
+    }
+
+    // Đọc detail kèm UPDLOCK, giữ khóa đến hết transaction.
+    // Update/Delete phải đọc quantity cũ để quyết định cộng/trừ stock (đọc dòng A → ghi dòng B),
+    // nên cần khóa để 2 request cùng lúc không cùng đọc giá trị cũ:
+    //   - Update: delta tính sai → stock lệch
+    //   - Delete: cả 2 cùng hoàn stock → stock bị cộng 2 lần
+    // Phải gọi bên trong transaction. Trả về entity được tracking (để Update/Remove).
+    private async Task<OrderDetail> LockDetailAsync(Guid id)
+    {
+        return await _db.OrderDetails
+            .FromSqlInterpolated($"SELECT * FROM OrderDetails WITH (UPDLOCK, ROWLOCK) WHERE id = {id}")
+            .FirstOrDefaultAsync()
+            ?? throw new NotFoundException($"Order detail '{id}' not found");
+    }
+
+    // Order phải tồn tại và ở trạng thái cho phép sửa (xem Order.IsEditable)
+    private async Task EnsureOrderEditableAsync(Guid orderId, string action)
+    {
+        var order = await _db.Orders.AsNoTracking().FirstOrDefaultAsync(o => o.Id == orderId)
+            ?? throw new NotFoundException($"Order '{orderId}' not found");
+
+        if (!order.IsEditable())
+            throw new ConflictException($"Order is {order.Status.ToString().ToLower()}, cannot {action}");
+    }
+
+    // mục 4, discount
+    private static void EnsureDiscountValid(decimal discount, decimal unitPrice, int quantity)
+    {
+        if (discount > unitPrice * quantity)
+            throw new BadRequestException("Discount cannot exceed unitPrice × quantity");
+    }
+
+    // Atomic: UPDATE Products SET stock = stock - @qty WHERE id = @id AND stock >= @qty
+    private async Task DecreaseStockAsync(Guid productId, int quantity)
+    {
+        var now = DateTime.UtcNow;
+        var affected = await _db.Products
+            .Where(p => p.Id == productId && p.Stock >= quantity)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(p => p.Stock, p => p.Stock - quantity)
+                .SetProperty(p => p.UpdatedAt, now));
+
+        if (affected == 0)
+        {
+            var available = await _db.Products
+                .Where(p => p.Id == productId)
+                .Select(p => (int?)p.Stock)
+                .FirstOrDefaultAsync()
+                ?? throw new NotFoundException($"Product '{productId}' not found");
+            throw new ConflictException($"Insufficient stock: requested {quantity}, available {available}");
+        }
+    }
+
+    private async Task IncreaseStockAsync(Guid productId, int quantity)
+    {
+        var now = DateTime.UtcNow;
+        await _db.Products
+            .Where(p => p.Id == productId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(p => p.Stock, p => p.Stock + quantity)
+                .SetProperty(p => p.UpdatedAt, now));
     }
 
     private Task RecalculateOrderTotalAsync(Guid orderId)

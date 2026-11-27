@@ -11,10 +11,16 @@ public class OrderDetailsController : ControllerBase
 {
     private readonly IOrderDetailService _service;
     private readonly CreateOrderDetailHandler _createHandler;
-    public OrderDetailsController(IOrderDetailService service, CreateOrderDetailHandler createHandler)
+    private readonly UpdateOrderDetailHandler _updateHandler;
+
+    public OrderDetailsController(
+        IOrderDetailService service,
+        CreateOrderDetailHandler createHandler,
+        UpdateOrderDetailHandler updateHandler)
     {
         _service = service;
         _createHandler = createHandler;
+        _updateHandler = updateHandler;
     }
 
     [HttpGet]
@@ -48,7 +54,8 @@ public class OrderDetailsController : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateOrderDetailRequest request)
     {
-        var updated = await _service.UpdateAsync(id, request);
+        var cmd = new UpdateOrderDetailCommand(id, request.Quantity, request.Discount, request.Notes);
+        var updated = await _updateHandler.HandleAsync(cmd);
         return Ok(updated);
     }
 

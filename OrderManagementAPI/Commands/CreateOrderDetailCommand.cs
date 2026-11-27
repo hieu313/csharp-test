@@ -1,3 +1,6 @@
+using MediatR;
+using OrderManagement.Dtos;
+
 namespace OrderManagementAPI.Commands;
 
 public sealed record CreateOrderDetailCommand(
@@ -6,4 +9,4 @@ public sealed record CreateOrderDetailCommand(
     int Quantity,
     decimal Discount,
     string? Notes
-);
+) : IRequest<OrderDetailResponseDto>;

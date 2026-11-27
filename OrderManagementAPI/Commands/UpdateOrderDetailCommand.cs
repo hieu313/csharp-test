@@ -1,3 +1,6 @@
+using MediatR;
+using OrderManagement.Dtos;
+
 namespace OrderManagementAPI.Commands;
 
 public sealed record UpdateOrderDetailCommand(
@@ -5,4 +8,4 @@ public sealed record UpdateOrderDetailCommand(
     int? Quantity,
     decimal? Discount,
     string? Notes
-);
+) : IRequest<OrderDetailResponseDto>;

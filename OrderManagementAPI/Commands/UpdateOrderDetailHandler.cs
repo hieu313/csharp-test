@@ -1,10 +1,11 @@
+using MediatR;
 using OrderManagement.Dtos;
 using OrderManagement.Exceptions;
 using OrderManagement.Repositories;
 
 namespace OrderManagementAPI.Commands;
 
-public sealed class UpdateOrderDetailHandler
+public sealed class UpdateOrderDetailHandler : IRequestHandler<UpdateOrderDetailCommand, OrderDetailResponseDto>
 {
     private readonly IOrderDetailRepository _details;
     private readonly IProductRepository _products;
@@ -23,12 +24,12 @@ public sealed class UpdateOrderDetailHandler
         _uow = uow;
     }
 
-    public async Task<OrderDetailResponseDto> HandleAsync(UpdateOrderDetailCommand cmd)
+    public async Task<OrderDetailResponseDto> Handle(UpdateOrderDetailCommand request, CancellationToken ct)
     {
         await using var tx = await _uow.BeginTransactionAsync();
 
-        var detail = await _details.GetForUpdateAsync(cmd.Id)
-            ?? throw new NotFoundException($"Order detail '{cmd.Id}' not found");
+        var detail = await _details.GetForUpdateAsync(request.Id)
+            ?? throw new NotFoundException($"Order detail '{request.Id}' not found");
 
         var order = await _orders.GetByIdAsync(detail.OrderId)
             ?? throw new NotFoundException($"Order '{detail.OrderId}' not found");
@@ -36,8 +37,8 @@ public sealed class UpdateOrderDetailHandler
         if (!order.IsEditable())
             throw new ConflictException($"Order is {order.Status.ToString().ToLower()}, cannot modify items");
 
-        var newQuantity = cmd.Quantity ?? detail.Quantity;
-        var newDiscount = cmd.Discount ?? detail.Discount;
+        var newQuantity = request.Quantity ?? detail.Quantity;
+        var newDiscount = request.Discount ?? detail.Discount;
 
         if (newDiscount > detail.UnitPrice * newQuantity)
             throw new BadRequestException("Discount cannot exceed unitPrice × quantity");
@@ -57,12 +58,12 @@ public sealed class UpdateOrderDetailHandler
             await _products.IncreaseStockAsync(detail.ProductId, -delta);
         }
 
-        detail.Update(cmd.Quantity, cmd.Discount, cmd.Notes);
+        detail.Update(request.Quantity, request.Discount, request.Notes);
         await _uow.SaveChangesAsync();
 
         await _orders.RecalculateTotalAsync(detail.OrderId);
         await tx.CommitAsync();
 
-        return (await _details.GetDtoByIdAsync(cmd.Id))!;
+        return (await _details.GetDtoByIdAsync(request.Id))!;
     }
 }

@@ -1,9 +1,10 @@
+using MediatR;
 using OrderManagement.Exceptions;
 using OrderManagement.Repositories;
 
 namespace OrderManagementAPI.Commands;
 
-public sealed class DeleteOrderDetailHandler
+public sealed class DeleteOrderDetailHandler : IRequestHandler<DeleteOrderDetailCommand>
 {
     private readonly IOrderDetailRepository _details;
     private readonly IProductRepository _products;
@@ -22,12 +23,12 @@ public sealed class DeleteOrderDetailHandler
         _uow = uow;
     }
 
-    public async Task HandleAsync(DeleteOrderDetailCommand cmd)
+    public async Task Handle(DeleteOrderDetailCommand request, CancellationToken ct)
     {
         await using var tx = await _uow.BeginTransactionAsync();
 
-        var detail = await _details.GetForUpdateAsync(cmd.Id)
-            ?? throw new NotFoundException($"Order detail '{cmd.Id}' not found");
+        var detail = await _details.GetForUpdateAsync(request.Id)
+            ?? throw new NotFoundException($"Order detail '{request.Id}' not found");
 
         var order = await _orders.GetByIdAsync(detail.OrderId)
             ?? throw new NotFoundException($"Order '{detail.OrderId}' not found");

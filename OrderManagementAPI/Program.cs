@@ -3,8 +3,6 @@ using OrderManagement;
 using OrderManagement.Exceptions;
 using OrderManagement.Repositories;
 using OrderManagement.Services;
-using OrderManagementAPI.Commands;
-using OrderManagementAPI.Queries;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,14 +20,7 @@ builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<IOrderDetailRepository, OrderDetailRepository>();
 builder.Services.AddScoped<IOrderDetailService, OrderDetailService>();
-builder.Services.AddScoped<CreateOrderDetailHandler>();
-builder.Services.AddScoped<CreateBulkOrderDetailHandler>();
-builder.Services.AddScoped<UpdateOrderDetailHandler>();
-builder.Services.AddScoped<DeleteOrderDetailHandler>();
-builder.Services.AddScoped<GetOrderDetailByIdHandler>();
-builder.Services.AddScoped<GetOrderDetailListHandler>();
-builder.Services.AddScoped<GetOrderDetailsByOrderHandler>();
-builder.Services.AddScoped<GetOrderDetailsByProductHandler>();
+builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
 builder.Services.AddOpenApi();
 
 builder.Services.AddExceptionHandler<AppExceptionHandler>();

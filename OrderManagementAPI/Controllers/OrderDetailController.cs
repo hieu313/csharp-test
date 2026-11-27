@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using OrderManagement.Dtos;
 using OrderManagement.Services;
+using OrderManagementAPI.Commands;
+
 namespace OrderManagement.Controllers;
 
 [ApiController]
@@ -8,7 +10,12 @@ namespace OrderManagement.Controllers;
 public class OrderDetailsController : ControllerBase
 {
     private readonly IOrderDetailService _service;
-    public OrderDetailsController(IOrderDetailService service) => _service = service;
+    private readonly CreateOrderDetailHandler _createHandler;
+    public OrderDetailsController(IOrderDetailService service, CreateOrderDetailHandler createHandler)
+    {
+        _service = service;
+        _createHandler = createHandler;
+    }
 
     [HttpGet]
     public async Task<IActionResult> GetList([FromQuery] OrderDetailQuery query)
@@ -20,7 +27,14 @@ public class OrderDetailsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateOrderDetailRequest request)
     {
-        var created = await _service.CreateAsync(request);
+        var cmd = new CreateOrderDetailCommand(
+            request.OrderId!.Value,
+            request.ProductId!.Value,
+            request.Quantity!.Value,
+            request.Discount ?? 0,
+            request.Notes);
+
+        var created = await _createHandler.HandleAsync(cmd);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 

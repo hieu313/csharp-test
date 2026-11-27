@@ -3,6 +3,7 @@ using OrderManagement;
 using OrderManagement.Exceptions;
 using OrderManagement.Repositories;
 using OrderManagement.Services;
+using OrderManagementAPI.Commands;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +21,7 @@ builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<IOrderDetailRepository, OrderDetailRepository>();
 builder.Services.AddScoped<IOrderDetailService, OrderDetailService>();
+builder.Services.AddScoped<CreateOrderDetailHandler>();
 builder.Services.AddOpenApi();
 
 builder.Services.AddExceptionHandler<AppExceptionHandler>();

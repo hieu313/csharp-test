@@ -9,10 +9,13 @@ public class OrderDetailItemRequest
     [Range(0, double.MaxValue)] public decimal? Discount { get; set; }
 }
 
-public class CreateOrderDetailRequest : OrderDetailItemRequest
+public class CreateOrderDetailRequest
 {
-    [Required] public Guid? OrderId { get; set; }
-    [MaxLength(500)] public string? Notes { get; set; }
+    [Required] public Guid? OrderId { get; init; }
+    [Required] public Guid? ProductId { get; init; }
+    [Required, Range(1, int.MaxValue)] public int? Quantity { get; init; }
+    [Range(0, double.MaxValue)] public decimal? Discount { get; init; }
+    public string? Notes { get; init; }
 }
 
 public class CreateBulkOrderDetailRequest

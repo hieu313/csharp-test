@@ -1,3 +1,4 @@
+using FluentValidation;
 using MediatR;
 using OrderManagement;
 using OrderManagement.Dtos;
@@ -6,7 +7,7 @@ using OrderManagement.Repositories;
 
 namespace OrderManagementAPI.Features;
 
-public class CreateBulkOrderDetail
+public static class CreateBulkOrderDetail
 {
     public sealed record Item(Guid ProductId, int Quantity, decimal Discount, string? Notes);
 
@@ -14,6 +15,23 @@ public class CreateBulkOrderDetail
         Guid OrderId,
         IReadOnlyList<Item> Items
     ) : IRequest<IReadOnlyList<OrderDetailResponseDto>>;
+    
+    public sealed class Validator: AbstractValidator<Command>
+    {
+        public Validator()
+        {
+            RuleFor(x => x.OrderId).NotEmpty();
+            RuleFor(x => x.Items).NotEmpty();
+            RuleForEach(x => x.Items).ChildRules(item =>
+            {
+                item.RuleFor(i => i.Quantity).GreaterThan(0);
+                item.RuleFor(j => j.Discount).GreaterThan(0);
+            });
+            RuleFor(x => x.Items)
+                .Must(items => items.Select(i => i.ProductId).Distinct().Count() == items.Count)
+                .WithMessage("Duplicate products in request");
+        }
+    }
 
     public sealed class Handler : IRequestHandler<Command, IReadOnlyList<OrderDetailResponseDto>>
     {
@@ -36,29 +54,32 @@ public class CreateBulkOrderDetail
 
         public async Task<IReadOnlyList<OrderDetailResponseDto>> Handle(Command request, CancellationToken ct)
         {
-            var duplicates = request.Items
-                .GroupBy(i => i.ProductId)
-                .Where(g => g.Count() > 1)
-                .Select(g => g.Key)
-                .ToList();
-            if (duplicates.Count > 0)
-                throw new BadRequestException($"Duplicate products in request: {string.Join(", ", duplicates)}");
-
             await using var tx = await _uow.BeginTransactionAsync(ct);
 
-            var order = await _orders.GetByIdAsync(request.OrderId, ct)
-                ?? throw new NotFoundException($"Order '{request.OrderId}' not found");
-
-            if (!order.IsEditable())
-                throw new ConflictException($"Order is {order.Status.ToString().ToLower()}, cannot add items");
+            var order = await _orders.GetByIdAsync(request.OrderId, ct);
+            EnsureOrderEditable(order, request.OrderId);
 
             var productIds = request.Items.Select(i => i.ProductId).ToList();
             var products = await _products.GetByIdsForUpdateAsync(productIds, ct);
 
+            ValidateProductItem(request.Items, products);
+
+            var details = CreateOrderDetails(request.OrderId, request.Items, products);
+            _details.AddRange(details);
+            await _uow.SaveChangesAsync(ct);
+
+            await _orders.RecalculateTotalAsync(request.OrderId, ct);
+            await tx.CommitAsync();
+
+            return await _details.GetDtosByIdsAsync(details.Select(d => d.Id).ToList(), ct);
+        }
+
+        private void ValidateProductItem(IReadOnlyList<Item> items, IReadOnlyDictionary<Guid, Product> products)
+        {
             var errors = new List<BulkItemError>();
-            for (var i = 0; i < request.Items.Count; i++)
+            for (var i = 0; i < items.Count; i++)
             {
-                var item = request.Items[i];
+                var item = items[i];
                 if (!products.TryGetValue(item.ProductId, out var product))
                     errors.Add(new BulkItemError(i, item.ProductId, "Product not found"));
                 else if (item.Quantity > product.Stock)
@@ -69,25 +90,32 @@ public class CreateBulkOrderDetail
             }
 
             if (errors.Count > 0)
-                throw new BadRequestException($"{errors.Count} of {request.Items.Count} items are invalid, nothing was created")
+                throw new BadRequestException($"{errors.Count} of {items.Count} items are invalid, nothing was created")
                 {
                     Errors = errors
                 };
+        }
 
-            var details = new List<OrderDetail>(request.Items.Count);
-            foreach (var item in request.Items)
+        private void EnsureOrderEditable(Order? order, Guid orderId)
+        {
+            if (order is null)
+                throw new NotFoundException($"Order '{orderId}' not found");
+            if (!order.IsEditable())
+                throw new ConflictException($"Order is {order.Status.ToString().ToLower()}, cannot add items");
+        }
+
+        private IReadOnlyList<OrderDetail> CreateOrderDetails(Guid orderId, IReadOnlyList<Item> items,
+            IReadOnlyDictionary<Guid, Product> products)
+        {
+            var details = new List<OrderDetail>(items.Count);
+            foreach (var item in items)
             {
                 var product = products[item.ProductId];
                 product.DecreaseStock(item.Quantity);
-                details.Add(new OrderDetail(request.OrderId, product.Id, item.Quantity, product.Price, item.Discount, item.Notes));
+                details.Add(new OrderDetail(orderId, product.Id, item.Quantity, product.Price, item.Discount, item.Notes));
             }
-            _details.AddRange(details);
-            await _uow.SaveChangesAsync(ct);
 
-            await _orders.RecalculateTotalAsync(request.OrderId, ct);
-            await tx.CommitAsync();
-
-            return await _details.GetDtosByIdsAsync(details.Select(d => d.Id).ToList(), ct);
+            return details;
         }
     }
 }

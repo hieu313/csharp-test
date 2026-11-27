@@ -22,6 +22,7 @@ builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<IOrderDetailRepository, OrderDetailRepository>();
 builder.Services.AddScoped<IOrderDetailService, OrderDetailService>();
 builder.Services.AddScoped<CreateOrderDetailHandler>();
+builder.Services.AddScoped<CreateBulkOrderDetailHandler>();
 builder.Services.AddScoped<UpdateOrderDetailHandler>();
 builder.Services.AddScoped<DeleteOrderDetailHandler>();
 builder.Services.AddOpenApi();

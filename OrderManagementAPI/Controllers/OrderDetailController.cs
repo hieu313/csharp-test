@@ -11,17 +11,20 @@ public class OrderDetailsController : ControllerBase
 {
     private readonly IOrderDetailService _service;
     private readonly CreateOrderDetailHandler _createHandler;
+    private readonly CreateBulkOrderDetailHandler _createBulkHandler;
     private readonly UpdateOrderDetailHandler _updateHandler;
     private readonly DeleteOrderDetailHandler _deleteHandler;
 
     public OrderDetailsController(
         IOrderDetailService service,
         CreateOrderDetailHandler createHandler,
+        CreateBulkOrderDetailHandler createBulkHandler,
         UpdateOrderDetailHandler updateHandler,
         DeleteOrderDetailHandler deleteHandler)
     {
         _service = service;
         _createHandler = createHandler;
+        _createBulkHandler = createBulkHandler;
         _updateHandler = updateHandler;
         _deleteHandler = deleteHandler;
     }
@@ -50,7 +53,15 @@ public class OrderDetailsController : ControllerBase
     [HttpPost("bulk")]
     public async Task<IActionResult> CreateBulk([FromBody] CreateBulkOrderDetailRequest request)
     {
-        var created = await _service.CreateBulkAsync(request);
+        var cmd = new CreateBulkOrderDetailCommand(
+            request.OrderId!.Value,
+            request.Items.Select(i => new BulkOrderDetailItem(
+                i.ProductId!.Value,
+                i.Quantity!.Value,
+                i.Discount ?? 0,
+                null)).ToList());
+
+        var created = await _createBulkHandler.HandleAsync(cmd);
         return StatusCode(StatusCodes.Status201Created, created);
     }
 

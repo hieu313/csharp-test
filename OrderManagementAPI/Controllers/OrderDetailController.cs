@@ -17,6 +17,7 @@ public class OrderDetailsController : ControllerBase
     private readonly DeleteOrderDetailHandler _deleteHandler;
     private readonly GetOrderDetailByIdHandler _getByIdHandler;
     private readonly GetOrderDetailListHandler _getListHandler;
+    private readonly GetOrderDetailsByOrderHandler _getByOrderHandler;
 
     public OrderDetailsController(
         IOrderDetailService service,
@@ -25,7 +26,8 @@ public class OrderDetailsController : ControllerBase
         UpdateOrderDetailHandler updateHandler,
         DeleteOrderDetailHandler deleteHandler,
         GetOrderDetailByIdHandler getByIdHandler,
-        GetOrderDetailListHandler getListHandler)
+        GetOrderDetailListHandler getListHandler,
+        GetOrderDetailsByOrderHandler getByOrderHandler)
     {
         _service = service;
         _createHandler = createHandler;
@@ -34,6 +36,7 @@ public class OrderDetailsController : ControllerBase
         _deleteHandler = deleteHandler;
         _getByIdHandler = getByIdHandler;
         _getListHandler = getListHandler;
+        _getByOrderHandler = getByOrderHandler;
     }
 
     [HttpGet]
@@ -100,8 +103,8 @@ public class OrderDetailsController : ControllerBase
     [HttpGet("order/{orderId:guid}")]
     public async Task<IActionResult> GetByOrderId(Guid orderId)
     {
-        var orderDetails = await _service.GetByOrderIdAsync(orderId);
-        return Ok(orderDetails);
+        var result = await _getByOrderHandler.HandleAsync(new GetOrderDetailsByOrderQuery(orderId));
+        return Ok(result);
     }
 
     [HttpGet("product/{productId:guid}")]

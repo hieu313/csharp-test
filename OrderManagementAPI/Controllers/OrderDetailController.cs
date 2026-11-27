@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using OrderManagement.Dtos;
 using OrderManagement.Services;
 using OrderManagementAPI.Commands;
+using OrderManagementAPI.Queries;
 
 namespace OrderManagement.Controllers;
 
@@ -14,19 +15,22 @@ public class OrderDetailsController : ControllerBase
     private readonly CreateBulkOrderDetailHandler _createBulkHandler;
     private readonly UpdateOrderDetailHandler _updateHandler;
     private readonly DeleteOrderDetailHandler _deleteHandler;
+    private readonly GetOrderDetailByIdHandler _getByIdHandler;
 
     public OrderDetailsController(
         IOrderDetailService service,
         CreateOrderDetailHandler createHandler,
         CreateBulkOrderDetailHandler createBulkHandler,
         UpdateOrderDetailHandler updateHandler,
-        DeleteOrderDetailHandler deleteHandler)
+        DeleteOrderDetailHandler deleteHandler,
+        GetOrderDetailByIdHandler getByIdHandler)
     {
         _service = service;
         _createHandler = createHandler;
         _createBulkHandler = createBulkHandler;
         _updateHandler = updateHandler;
         _deleteHandler = deleteHandler;
+        _getByIdHandler = getByIdHandler;
     }
 
     [HttpGet]
@@ -83,10 +87,10 @@ public class OrderDetailsController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
-        var orderDetail = await _service.GetByIdAsync(id);
-        if (orderDetail is null)
+        var result = await _getByIdHandler.HandleAsync(new GetOrderDetailByIdQuery(id));
+        if (result is null)
             return NotFound(new { message = $"Order detail '{id}' not found" });
-        return Ok(orderDetail);
+        return Ok(result);
     }
 
     [HttpGet("order/{orderId:guid}")]

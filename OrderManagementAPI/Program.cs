@@ -4,6 +4,7 @@ using OrderManagement.Exceptions;
 using OrderManagement.Repositories;
 using OrderManagement.Services;
 using OrderManagementAPI.Commands;
+using OrderManagementAPI.Queries;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +26,7 @@ builder.Services.AddScoped<CreateOrderDetailHandler>();
 builder.Services.AddScoped<CreateBulkOrderDetailHandler>();
 builder.Services.AddScoped<UpdateOrderDetailHandler>();
 builder.Services.AddScoped<DeleteOrderDetailHandler>();
+builder.Services.AddScoped<GetOrderDetailByIdHandler>();
 builder.Services.AddOpenApi();
 
 builder.Services.AddExceptionHandler<AppExceptionHandler>();

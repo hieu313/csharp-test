@@ -25,13 +25,20 @@ public class Product
         CreatedAt = UpdatedAt = DateTime.UtcNow;
     }
 
-    // Dùng khi entity đã được tracking và dòng đã bị khóa (bulk create).
+    // Dùng khi entity đã được tracking và dòng đã bị khóa.
     // Service phải kiểm tra đủ stock trước; đây chỉ là lớp bảo vệ cuối.
     public void DecreaseStock(int quantity)
     {
         if (quantity < 1) throw new ArgumentOutOfRangeException(nameof(quantity));
         if (quantity > Stock) throw new InvalidOperationException($"Insufficient stock for product {Id}");
         Stock -= quantity;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void IncreaseStock(int quantity)
+    {
+        if (quantity < 1) throw new ArgumentOutOfRangeException(nameof(quantity));
+        Stock += quantity;
         UpdatedAt = DateTime.UtcNow;
     }
 }

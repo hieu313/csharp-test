@@ -1,12 +1,22 @@
+using FluentValidation;
 using MediatR;
+using OrderManagement;
 using OrderManagement.Exceptions;
 using OrderManagement.Repositories;
 
 namespace OrderManagementAPI.Features;
 
-public class DeleteOrderDetail
+public static class DeleteOrderDetail
 {
     public sealed record Command(Guid Id) : IRequest;
+
+    public sealed class Validator : AbstractValidator<Command>
+    {
+        public Validator()
+        {
+            RuleFor(x => x.Id).NotEmpty();
+        }
+    }
 
     public sealed class Handler : IRequestHandler<Command>
     {
@@ -34,19 +44,28 @@ public class DeleteOrderDetail
             var detail = await _details.GetForUpdateAsync(request.Id, ct)
                 ?? throw new NotFoundException($"Order detail '{request.Id}' not found");
 
-            var order = await _orders.GetByIdAsync(detail.OrderId, ct)
-                ?? throw new NotFoundException($"Order '{detail.OrderId}' not found");
+            var order = await _orders.GetByIdAsync(detail.OrderId, ct);
+            EnsureOrderEditable(order, detail.OrderId);
 
-            if (!order.IsEditable())
-                throw new ConflictException($"Order is {order.Status.ToString().ToLower()}, cannot remove items");
+            var products = await _products.GetByIdsForUpdateAsync([detail.ProductId], ct);
+            if (!products.TryGetValue(detail.ProductId, out var product))
+                throw new NotFoundException($"Product '{detail.ProductId}' not found");
 
-            await _products.IncreaseStockAsync(detail.ProductId, detail.Quantity, ct);
+            product.IncreaseStock(detail.Quantity);
 
             _details.Remove(detail);
             await _uow.SaveChangesAsync(ct);
 
             await _orders.RecalculateTotalAsync(detail.OrderId, ct);
             await tx.CommitAsync();
+        }
+
+        private static void EnsureOrderEditable(Order? order, Guid orderId)
+        {
+            if (order is null)
+                throw new NotFoundException($"Order '{orderId}' not found");
+            if (!order.IsEditable())
+                throw new ConflictException($"Order is {order.Status.ToString().ToLower()}, cannot remove items");
         }
     }
 }

@@ -1,3 +1,4 @@
+using FluentValidation;
 using MediatR;
 using OrderManagement.Dtos;
 using OrderManagement.Exceptions;
@@ -5,9 +6,17 @@ using OrderManagement.Repositories;
 
 namespace OrderManagementAPI.Features;
 
-public class GetOrderDetailsByOrder
+public static class GetOrderDetailsByOrder
 {
     public sealed record Query(Guid OrderId) : IRequest<OrderDetailsByOrderResponse>;
+
+    public sealed class Validator : AbstractValidator<Query>
+    {
+        public Validator()
+        {
+            RuleFor(x => x.OrderId).NotEmpty();
+        }
+    }
 
     public sealed class Handler : IRequestHandler<Query, OrderDetailsByOrderResponse>
     {

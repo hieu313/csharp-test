@@ -1,12 +1,21 @@
+using FluentValidation;
 using MediatR;
 using OrderManagement.Dtos;
 using OrderManagement.Repositories;
 
 namespace OrderManagementAPI.Features;
 
-public class GetOrderDetailById
+public static class GetOrderDetailById
 {
     public sealed record Query(Guid Id) : IRequest<OrderDetailResponseDto?>;
+
+    public sealed class Validator : AbstractValidator<Query>
+    {
+        public Validator()
+        {
+            RuleFor(x => x.Id).NotEmpty();
+        }
+    }
 
     public sealed class Handler : IRequestHandler<Query, OrderDetailResponseDto?>
     {

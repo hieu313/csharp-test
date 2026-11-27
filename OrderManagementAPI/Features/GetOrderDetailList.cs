@@ -1,13 +1,23 @@
+using FluentValidation;
 using MediatR;
 using OrderManagement.Dtos;
 using OrderManagement.Repositories;
 
 namespace OrderManagementAPI.Features;
 
-public class GetOrderDetailList
+public static class GetOrderDetailList
 {
     public sealed record Query(Guid? OrderId, Guid? ProductId, int Page, int Limit)
         : IRequest<PagedResponse<OrderDetailResponseDto>>;
+
+    public sealed class Validator : AbstractValidator<Query>
+    {
+        public Validator()
+        {
+            RuleFor(x => x.Page).GreaterThan(0);
+            RuleFor(x => x.Limit).InclusiveBetween(1, 100);
+        }
+    }
 
     public sealed class Handler : IRequestHandler<Query, PagedResponse<OrderDetailResponseDto>>
     {

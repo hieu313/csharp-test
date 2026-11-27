@@ -1,3 +1,4 @@
+using FluentValidation;
 using MediatR;
 using OrderManagement;
 using OrderManagement.Dtos;
@@ -6,7 +7,7 @@ using OrderManagement.Repositories;
 
 namespace OrderManagementAPI.Features;
 
-public class CreateOrderDetail
+public static class CreateOrderDetail
 {
     public sealed record Command(
         Guid OrderId,
@@ -15,6 +16,17 @@ public class CreateOrderDetail
         decimal Discount,
         string? Notes
     ) : IRequest<OrderDetailResponseDto>;
+
+    public sealed class Validator : AbstractValidator<Command>
+    {
+        public Validator()
+        {
+            RuleFor(x => x.OrderId).NotEmpty();
+            RuleFor(x => x.ProductId).NotEmpty();
+            RuleFor(x => x.Quantity).GreaterThan(0);
+            RuleFor(x => x.Discount).GreaterThanOrEqualTo(0);
+        }
+    }
 
     public sealed class Handler : IRequestHandler<Command, OrderDetailResponseDto>
     {
@@ -39,24 +51,14 @@ public class CreateOrderDetail
         {
             await using var tx = await _uow.BeginTransactionAsync(ct);
 
-            await EnsureOrderEditableAsync(request.OrderId, ct);
+            var order = await _orders.GetByIdAsync(request.OrderId, ct);
+            EnsureOrderEditable(order, request.OrderId);
 
-            var product = await _products.GetByIdAsync(request.ProductId, ct)
-                ?? throw new NotFoundException($"Product '{request.ProductId}' not found");
+            var products = await _products.GetByIdsForUpdateAsync([request.ProductId], ct);
+            var product = ValidateProduct(request, products);
 
-            var unitPrice = product.Price;
-
-            if (request.Discount > unitPrice * request.Quantity)
-                throw new BadRequestException("Discount cannot exceed unitPrice × quantity");
-
-            if (!await _products.TryDecreaseStockAsync(request.ProductId, request.Quantity, ct))
-            {
-                var available = await _products.GetStockAsync(request.ProductId, ct)
-                    ?? throw new NotFoundException($"Product '{request.ProductId}' not found");
-                throw new ConflictException($"Insufficient stock: requested {request.Quantity}, available {available}");
-            }
-
-            var detail = new OrderDetail(request.OrderId, request.ProductId, request.Quantity, unitPrice, request.Discount, request.Notes);
+            product.DecreaseStock(request.Quantity);
+            var detail = new OrderDetail(request.OrderId, product.Id, request.Quantity, product.Price, request.Discount, request.Notes);
             _details.Add(detail);
             await _uow.SaveChangesAsync(ct);
 
@@ -66,11 +68,24 @@ public class CreateOrderDetail
             return (await _details.GetDtoByIdAsync(detail.Id, ct))!;
         }
 
-        private async Task EnsureOrderEditableAsync(Guid orderId, CancellationToken ct)
+        private static Product ValidateProduct(Command request, IReadOnlyDictionary<Guid, Product> products)
         {
-            var order = await _orders.GetByIdAsync(orderId, ct)
-                ?? throw new NotFoundException($"Order '{orderId}' not found");
+            if (!products.TryGetValue(request.ProductId, out var product))
+                throw new NotFoundException($"Product '{request.ProductId}' not found");
 
+            if (request.Quantity > product.Stock)
+                throw new ConflictException($"Insufficient stock: requested {request.Quantity}, available {product.Stock}");
+
+            if (request.Discount > product.Price * request.Quantity)
+                throw new BadRequestException("Discount cannot exceed unitPrice × quantity");
+
+            return product;
+        }
+
+        private static void EnsureOrderEditable(Order? order, Guid orderId)
+        {
+            if (order is null)
+                throw new NotFoundException($"Order '{orderId}' not found");
             if (!order.IsEditable())
                 throw new ConflictException($"Order is {order.Status.ToString().ToLower()}, cannot add items");
         }

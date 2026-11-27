@@ -12,15 +12,18 @@ public class OrderDetailsController : ControllerBase
     private readonly IOrderDetailService _service;
     private readonly CreateOrderDetailHandler _createHandler;
     private readonly UpdateOrderDetailHandler _updateHandler;
+    private readonly DeleteOrderDetailHandler _deleteHandler;
 
     public OrderDetailsController(
         IOrderDetailService service,
         CreateOrderDetailHandler createHandler,
-        UpdateOrderDetailHandler updateHandler)
+        UpdateOrderDetailHandler updateHandler,
+        DeleteOrderDetailHandler deleteHandler)
     {
         _service = service;
         _createHandler = createHandler;
         _updateHandler = updateHandler;
+        _deleteHandler = deleteHandler;
     }
 
     [HttpGet]
@@ -62,7 +65,7 @@ public class OrderDetailsController : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {
-        await _service.DeleteAsync(id);
+        await _deleteHandler.HandleAsync(new DeleteOrderDetailCommand(id));
         return NoContent();
     }
 

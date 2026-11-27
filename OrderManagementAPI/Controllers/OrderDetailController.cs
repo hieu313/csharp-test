@@ -1,8 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using OrderManagement.Dtos;
-using OrderManagementAPI.Commands;
-using OrderManagementAPI.Queries;
+using OrderManagementAPI.Features;
 
 namespace OrderManagement.Controllers;
 
@@ -16,14 +15,14 @@ public class OrderDetailsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> GetList([FromQuery] OrderDetailQuery query)
     {
         var result = await _mediator
-            .Send(new GetOrderDetailListQuery(query.OrderId, query.ProductId, query.Page, query.Limit));
+            .Send(new GetOrderDetailList.Query(query.OrderId, query.ProductId, query.Page, query.Limit));
         return Ok(result);
     }
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateOrderDetailRequest request)
     {
-        var created = await _mediator.Send(new CreateOrderDetailCommand(
+        var created = await _mediator.Send(new CreateOrderDetail.Command(
             request.OrderId!.Value,
             request.ProductId!.Value,
             request.Quantity!.Value,
@@ -35,9 +34,9 @@ public class OrderDetailsController(IMediator mediator) : ControllerBase
     [HttpPost("bulk")]
     public async Task<IActionResult> CreateBulk([FromBody] CreateBulkOrderDetailRequest request)
     {
-        var created = await _mediator.Send(new CreateBulkOrderDetailCommand(
+        var created = await _mediator.Send(new CreateBulkOrderDetail.Command(
             request.OrderId!.Value,
-            request.Items.Select(i => new BulkOrderDetailItem(
+            request.Items.Select(i => new CreateBulkOrderDetail.Item(
                 i.ProductId!.Value,
                 i.Quantity!.Value,
                 i.Discount ?? 0,
@@ -49,21 +48,21 @@ public class OrderDetailsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateOrderDetailRequest request)
     {
         var updated = await _mediator
-            .Send(new UpdateOrderDetailCommand(id, request.Quantity, request.Discount, request.Notes));
+            .Send(new UpdateOrderDetail.Command(id, request.Quantity, request.Discount, request.Notes));
         return Ok(updated);
     }
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {
-        await _mediator.Send(new DeleteOrderDetailCommand(id));
+        await _mediator.Send(new DeleteOrderDetail.Command(id));
         return NoContent();
     }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
-        var result = await _mediator.Send(new GetOrderDetailByIdQuery(id));
+        var result = await _mediator.Send(new GetOrderDetailById.Query(id));
         if (result is null)
             return NotFound(new { message = $"Order detail '{id}' not found" });
         return Ok(result);
@@ -72,14 +71,14 @@ public class OrderDetailsController(IMediator mediator) : ControllerBase
     [HttpGet("order/{orderId:guid}")]
     public async Task<IActionResult> GetByOrderId(Guid orderId)
     {
-        var result = await _mediator.Send(new GetOrderDetailsByOrderQuery(orderId));
+        var result = await _mediator.Send(new GetOrderDetailsByOrder.Query(orderId));
         return Ok(result);
     }
 
     [HttpGet("product/{productId:guid}")]
     public async Task<IActionResult> GetByProductId(Guid productId)
     {
-        var result = await _mediator.Send(new GetOrderDetailsByProductQuery(productId));
+        var result = await _mediator.Send(new GetOrderDetailsByProduct.Query(productId));
         return Ok(result);
     }
 }

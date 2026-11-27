@@ -29,6 +29,7 @@ builder.Services.AddScoped<DeleteOrderDetailHandler>();
 builder.Services.AddScoped<GetOrderDetailByIdHandler>();
 builder.Services.AddScoped<GetOrderDetailListHandler>();
 builder.Services.AddScoped<GetOrderDetailsByOrderHandler>();
+builder.Services.AddScoped<GetOrderDetailsByProductHandler>();
 builder.Services.AddOpenApi();
 
 builder.Services.AddExceptionHandler<AppExceptionHandler>();

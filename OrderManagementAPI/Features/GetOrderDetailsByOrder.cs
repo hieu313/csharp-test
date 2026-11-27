@@ -22,10 +22,10 @@ public class GetOrderDetailsByOrder
 
         public async Task<OrderDetailsByOrderResponse> Handle(Query request, CancellationToken ct)
         {
-            if (!await _orders.ExistsAsync(request.OrderId))
+            if (!await _orders.ExistsAsync(request.OrderId, ct))
                 throw new NotFoundException($"Order '{request.OrderId}' not found");
 
-            var data = await _details.GetDtosByOrderIdAsync(request.OrderId);
+            var data = await _details.GetDtosByOrderIdAsync(request.OrderId, ct);
 
             var summary = new OrderSummary(
                 TotalItems: data.Count,

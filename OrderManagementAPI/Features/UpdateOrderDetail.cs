@@ -35,12 +35,12 @@ public class UpdateOrderDetail
 
         public async Task<OrderDetailResponseDto> Handle(Command request, CancellationToken ct)
         {
-            await using var tx = await _uow.BeginTransactionAsync();
+            await using var tx = await _uow.BeginTransactionAsync(ct);
 
-            var detail = await _details.GetForUpdateAsync(request.Id)
+            var detail = await _details.GetForUpdateAsync(request.Id, ct)
                 ?? throw new NotFoundException($"Order detail '{request.Id}' not found");
 
-            var order = await _orders.GetByIdAsync(detail.OrderId)
+            var order = await _orders.GetByIdAsync(detail.OrderId, ct)
                 ?? throw new NotFoundException($"Order '{detail.OrderId}' not found");
 
             if (!order.IsEditable())
@@ -55,25 +55,25 @@ public class UpdateOrderDetail
             var delta = newQuantity - detail.Quantity;
             if (delta > 0)
             {
-                if (!await _products.TryDecreaseStockAsync(detail.ProductId, delta))
+                if (!await _products.TryDecreaseStockAsync(detail.ProductId, delta, ct))
                 {
-                    var available = await _products.GetStockAsync(detail.ProductId)
+                    var available = await _products.GetStockAsync(detail.ProductId, ct)
                         ?? throw new NotFoundException($"Product '{detail.ProductId}' not found");
                     throw new ConflictException($"Insufficient stock: requested {delta} more, available {available}");
                 }
             }
             else if (delta < 0)
             {
-                await _products.IncreaseStockAsync(detail.ProductId, -delta);
+                await _products.IncreaseStockAsync(detail.ProductId, -delta, ct);
             }
 
             detail.Update(request.Quantity, request.Discount, request.Notes);
-            await _uow.SaveChangesAsync();
+            await _uow.SaveChangesAsync(ct);
 
-            await _orders.RecalculateTotalAsync(detail.OrderId);
+            await _orders.RecalculateTotalAsync(detail.OrderId, ct);
             await tx.CommitAsync();
 
-            return (await _details.GetDtoByIdAsync(request.Id))!;
+            return (await _details.GetDtoByIdAsync(request.Id, ct))!;
         }
     }
 }

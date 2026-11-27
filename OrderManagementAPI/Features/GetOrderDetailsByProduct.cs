@@ -22,11 +22,11 @@ public class GetOrderDetailsByProduct
 
         public async Task<OrderDetailsByProductResponse> Handle(Query request, CancellationToken ct)
         {
-            if (!await _products.ExistsAsync(request.ProductId))
+            if (!await _products.ExistsAsync(request.ProductId, ct))
                 throw new NotFoundException($"Product '{request.ProductId}' not found");
 
-            var data = await _details.GetDtosByProductIdAsync(request.ProductId);
-            var summary = await _details.GetSalesSummaryByProductAsync(request.ProductId);
+            var data = await _details.GetDtosByProductIdAsync(request.ProductId, ct);
+            var summary = await _details.GetSalesSummaryByProductAsync(request.ProductId, ct);
 
             return new OrderDetailsByProductResponse(data, summary);
         }

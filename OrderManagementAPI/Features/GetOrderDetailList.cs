@@ -17,7 +17,7 @@ public class GetOrderDetailList
 
         public async Task<PagedResponse<OrderDetailResponseDto>> Handle(Query request, CancellationToken ct)
         {
-            var (items, total) = await _details.GetPagedDtosAsync(request.OrderId, request.ProductId, request.Page, request.Limit);
+            var (items, total) = await _details.GetPagedDtosAsync(request.OrderId, request.ProductId, request.Page, request.Limit, ct);
             var totalPages = (int)Math.Ceiling(total / (double)request.Limit);
 
             return new PagedResponse<OrderDetailResponseDto>(

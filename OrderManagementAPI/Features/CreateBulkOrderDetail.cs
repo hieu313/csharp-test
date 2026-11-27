@@ -44,16 +44,16 @@ public class CreateBulkOrderDetail
             if (duplicates.Count > 0)
                 throw new BadRequestException($"Duplicate products in request: {string.Join(", ", duplicates)}");
 
-            await using var tx = await _uow.BeginTransactionAsync();
+            await using var tx = await _uow.BeginTransactionAsync(ct);
 
-            var order = await _orders.GetByIdAsync(request.OrderId)
+            var order = await _orders.GetByIdAsync(request.OrderId, ct)
                 ?? throw new NotFoundException($"Order '{request.OrderId}' not found");
 
             if (!order.IsEditable())
                 throw new ConflictException($"Order is {order.Status.ToString().ToLower()}, cannot add items");
 
             var productIds = request.Items.Select(i => i.ProductId).ToList();
-            var products = await _products.GetByIdsForUpdateAsync(productIds);
+            var products = await _products.GetByIdsForUpdateAsync(productIds, ct);
 
             var errors = new List<BulkItemError>();
             for (var i = 0; i < request.Items.Count; i++)
@@ -82,12 +82,12 @@ public class CreateBulkOrderDetail
                 details.Add(new OrderDetail(request.OrderId, product.Id, item.Quantity, product.Price, item.Discount, item.Notes));
             }
             _details.AddRange(details);
-            await _uow.SaveChangesAsync();
+            await _uow.SaveChangesAsync(ct);
 
-            await _orders.RecalculateTotalAsync(request.OrderId);
+            await _orders.RecalculateTotalAsync(request.OrderId, ct);
             await tx.CommitAsync();
 
-            return await _details.GetDtosByIdsAsync(details.Select(d => d.Id).ToList());
+            return await _details.GetDtosByIdsAsync(details.Select(d => d.Id).ToList(), ct);
         }
     }
 }

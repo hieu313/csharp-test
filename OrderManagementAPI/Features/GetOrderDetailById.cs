@@ -15,6 +15,6 @@ public class GetOrderDetailById
         public Handler(IOrderDetailRepository details) => _details = details;
 
         public Task<OrderDetailResponseDto?> Handle(Query request, CancellationToken ct)
-            => _details.GetDtoByIdAsync(request.Id);
+            => _details.GetDtoByIdAsync(request.Id, ct);
     }
 }

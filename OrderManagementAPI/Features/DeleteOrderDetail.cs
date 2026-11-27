@@ -29,23 +29,23 @@ public class DeleteOrderDetail
 
         public async Task Handle(Command request, CancellationToken ct)
         {
-            await using var tx = await _uow.BeginTransactionAsync();
+            await using var tx = await _uow.BeginTransactionAsync(ct);
 
-            var detail = await _details.GetForUpdateAsync(request.Id)
+            var detail = await _details.GetForUpdateAsync(request.Id, ct)
                 ?? throw new NotFoundException($"Order detail '{request.Id}' not found");
 
-            var order = await _orders.GetByIdAsync(detail.OrderId)
+            var order = await _orders.GetByIdAsync(detail.OrderId, ct)
                 ?? throw new NotFoundException($"Order '{detail.OrderId}' not found");
 
             if (!order.IsEditable())
                 throw new ConflictException($"Order is {order.Status.ToString().ToLower()}, cannot remove items");
 
-            await _products.IncreaseStockAsync(detail.ProductId, detail.Quantity);
+            await _products.IncreaseStockAsync(detail.ProductId, detail.Quantity, ct);
 
             _details.Remove(detail);
-            await _uow.SaveChangesAsync();
+            await _uow.SaveChangesAsync(ct);
 
-            await _orders.RecalculateTotalAsync(detail.OrderId);
+            await _orders.RecalculateTotalAsync(detail.OrderId, ct);
             await tx.CommitAsync();
         }
     }

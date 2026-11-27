@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using OrderManagement;
 using OrderManagement.Exceptions;
 using OrderManagement.Repositories;
-using OrderManagement.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,7 +18,6 @@ builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<IOrderDetailRepository, OrderDetailRepository>();
-builder.Services.AddScoped<IOrderDetailService, OrderDetailService>();
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
 builder.Services.AddOpenApi();
 
